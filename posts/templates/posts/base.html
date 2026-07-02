@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ page_title|default:"Блог" }}{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            color: #333;
+        }
+        header { border-bottom: 2px solid #333; margin-bottom: 2rem; padding-bottom: 1rem; }
+        header a { color: #333; text-decoration: none; font-size: 1.5rem; font-weight: bold; }
+        .post-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .post-card h2 { margin-bottom: 0.5rem; }
+        .post-card a { color: #0066cc; }
+        .meta { color: #666; font-size: 0.9rem; margin-top: 0.5rem; }
+        .content { margin-top: 1.5rem; }
+        .comments { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #ddd; }
+        .comment {
+            background: #f9f9f9;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd; color: #666; }
+    </style>
+</head>
+<body>
+    <header>
+        <a href="{% url 'posts:post_list' %}">📝 Мой Блог</a>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>Django Blog — учебный проект</p>
+    </footer>
+</body>
+</html>

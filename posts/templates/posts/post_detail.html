@@ -1,0 +1,39 @@
+{% extends 'posts/base.html' %}
+
+{% block title %}{{ post.title }}{% endblock %}
+
+{% block content %}
+<article>
+    <h1>{{ post.title }}</h1>
+    <p class="meta">
+        Автор: {{ post.author.username }} |
+        Опубликовано: {{ post.created_at|date:"d.m.Y H:i" }}
+        {% if post.updated_at != post.created_at %}
+        | Обновлено: {{ post.updated_at|date:"d.m.Y H:i" }}
+        {% endif %}
+    </p>
+    <div class="content">
+        {{ post.content|linebreaks }}
+    </div>
+</article>
+
+<section class="comments">
+    <h2>Комментарии ({{ comments.count }})</h2>
+
+    {% if comments %}
+        {% for comment in comments %}
+        <div class="comment">
+            <p>{{ comment.text|linebreaks }}</p>
+            <p class="meta">
+                {{ comment.author.username }} |
+                {{ comment.created_at|date:"d.m.Y H:i" }}
+            </p>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p>Комментариев пока нет.</p>
+    {% endif %}
+</section>
+
+<p><a href="{% url 'posts:post_list' %}">← Назад к списку</a></p>
+{% endblock %}

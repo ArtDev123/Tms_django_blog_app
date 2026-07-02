@@ -1,0 +1,25 @@
+{% extends 'posts/base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<h1>Все посты</h1>
+
+{% if posts %}
+    {% for post in posts %}
+    <article class="post-card">
+        <h2>
+            <a href="{% url 'posts:post_detail' post.pk %}">{{ post.title }}</a>
+        </h2>
+        <p>{{ post.content|truncatewords:30 }}</p>
+        <p class="meta">
+            Автор: {{ post.author.username }} |
+            {{ post.created_at|date:"d.m.Y H:i" }} |
+            Комментариев: {{ post.comments.count }}
+        </p>
+    </article>
+    {% endfor %}
+{% else %}
+    <p>Пока нет опубликованных постов. Добавьте их в <a href="/admin/">админке</a>.</p>
+{% endif %}
+{% endblock %}
