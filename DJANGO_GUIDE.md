@@ -25,7 +25,8 @@
 15. [Справочник manage-команд](#15-справочник-manage-команд)
 16. [Итоговая структура проекта](#16-итоговая-структура-проекта)
 17. [Что изучили на занятии](#17-что-изучили-на-занятии)
-18. [Полезные ссылки (документация Django)](#полезные-ссылки)
+18. [Формы — создание постов и комментариев](#18-формы--создание-постов-и-комментариев)
+19. [Полезные ссылки (документация Django)](#полезные-ссылки)
 
 ### Порядок на занятии
 
@@ -1577,14 +1578,16 @@ TMS_django/
 ├── posts/                      # ПРИЛОЖЕНИЕ — сущность Post
 │   ├── admin.py                # PostAdmin
 │   ├── models.py               # class Post
-│   ├── views.py                # post_list, post_detail
+│   ├── forms.py                # PostForm, CommentForm (§18)
+│   ├── views.py                # post_list, post_detail, post_create
 │   ├── urls.py
 │   ├── migrations/
 │   │   └── 0001_initial.py
 │   └── templates/posts/
 │       ├── base.html
 │       ├── post_list.html
-│       └── post_detail.html
+│       ├── post_detail.html
+│       └── post_form.html      # форма создания поста (§18)
 │
 ├── comments/                   # ПРИЛОЖЕНИЕ — сущность Comment
 │   ├── admin.py                # CommentAdmin
@@ -1629,12 +1632,230 @@ TMS_django/
 
 ---
 
+## 18. Формы — создание постов и комментариев
+
+Сейчас посты и комментарии создаются только через админку. Добавим **формы на сайте** — пользователь заполняет поля в браузере, Django сохраняет данные в PostgreSQL.
+
+### Что такое форма в Django
+
+**Форма** — Python-класс, который:
+1. Рисует HTML-поля (`<input>`, `<textarea>`)
+2. Проверяет введённые данные (валидация)
+3. Сохраняет данные в модель
+
+```
+GET  /create/  →  показать пустую форму
+POST /create/  →  проверить данные → сохранить в БД → редирект
+```
+
+**ModelForm** — форма, автоматически построенная по модели. Не нужно описывать каждое поле вручную.
+
+### Шаг 18.1. Создать `posts/forms.py`
+
+Создайте файл `posts/forms.py`:
+
+```python
+from django import forms
+
+from comments.models import Comment
+from .models import Post
+
+
+class PostForm(forms.ModelForm):
+    username = forms.CharField(label='Имя автора')
+
+    class Meta:
+        model = Post
+        fields = ['title', 'content']
+
+
+class CommentForm(forms.ModelForm):
+    username = forms.CharField(label='Имя автора')
+
+    class Meta:
+        model = Comment
+        fields = ['text']
+```
+
+**Разбор:**
+
+| Строка | Объяснение |
+|--------|------------|
+| `forms.ModelForm` | Форма на основе модели — поля берутся из `Meta.fields` |
+| `username` | Дополнительное поле (не в модели). Нужно, чтобы указать автора без системы логина |
+| `fields = ['title', 'content']` | Какие поля модели показать в форме. `author` не включаем — зададим в view |
+
+> Поле `author` в модели — ForeignKey на `User`. Вместо полноценной авторизации используем имя пользователя: если такого `User` нет — создаём через `get_or_create`.
+
+### Шаг 18.2. View для создания поста
+
+Добавьте в `posts/views.py`:
+
+```python
+from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404, redirect, render
+
+from comments.models import Comment
+from .forms import CommentForm, PostForm
+from .models import Post
+```
+
+И новую функцию `post_create`:
+
+```python
+def post_create(request):
+    form = PostForm(request.POST or None)
+
+    if request.method == 'POST' and form.is_valid():
+        author, _ = User.objects.get_or_create(username=form.cleaned_data['username'])
+        post = form.save(commit=False)
+        post.author = author
+        post.save()
+        return redirect('posts:post_detail', pk=post.pk)
+
+    return render(request, 'posts/post_form.html', {'form': form})
+```
+
+**Разбор `post_create`:**
+
+| Строка | Объяснение |
+|--------|------------|
+| `PostForm(request.POST or None)` | Если POST — форма с данными, иначе пустая |
+| `form.is_valid()` | Django проверяет поля (длина, обязательность...) |
+| `form.cleaned_data['username']` | Данные после валидации |
+| `form.save(commit=False)` | Создать объект Post в памяти, **не сохраняя** в БД |
+| `post.author = author` | Привязать автора вручную |
+| `redirect(...)` | После сохранения — на страницу нового поста |
+
+### Шаг 18.3. Форма комментария в `post_detail`
+
+Обновите `post_detail` в `posts/views.py`:
+
+```python
+def post_detail(request, pk):
+    """Детальная страница одного поста с комментариями."""
+    post = get_object_or_404(Post, pk=pk, is_published=True)
+    comments = post.comments.filter(is_active=True)
+    comment_form = CommentForm(request.POST or None)
+
+    if request.method == 'POST' and comment_form.is_valid():
+        author, _ = User.objects.get_or_create(username=comment_form.cleaned_data['username'])
+        Comment.objects.create(
+            post=post,
+            author=author,
+            text=comment_form.cleaned_data['text'],
+        )
+        return redirect('posts:post_detail', pk=pk)
+
+    context = {
+        'post': post,
+        'comments': comments,
+        'comment_form': comment_form,
+        'page_title': post.title,
+    }
+    return render(request, 'posts/post_detail.html', context)
+```
+
+Комментарий добавляется **на той же странице** — форма отправляет POST на URL поста.
+
+### Шаг 18.4. URL для создания поста
+
+Добавьте маршрут в `posts/urls.py`:
+
+```python
+urlpatterns = [
+    path('', views.post_list, name='post_list'),
+    path('create/', views.post_create, name='post_create'),
+    path('<int:pk>/', views.post_detail, name='post_detail'),
+]
+```
+
+| URL | View | name |
+|-----|------|------|
+| `/create/` | post_create | posts:post_create |
+
+### Шаг 18.5. Шаблон формы поста
+
+Создайте `posts/templates/posts/post_form.html`:
+
+```html
+{% extends 'posts/base.html' %}
+
+{% block title %}Новый пост{% endblock %}
+
+{% block content %}
+<h1>Новый пост</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Опубликовать</button>
+</form>
+<p><a href="{% url 'posts:post_list' %}">← Назад</a></p>
+{% endblock %}
+```
+
+| Конструкция | Объяснение |
+|-------------|------------|
+| `{% csrf_token %}` | Защита от подделки запросов. **Обязательна** в каждой POST-форме |
+| `{{ form.as_p }}` | Вся форма как набор `<p><label>...<input>` |
+| `method="post"` | Отправка данных на сервер (не GET) |
+
+### Шаг 18.6. Обновить шаблоны
+
+**`post_list.html`** — добавьте ссылку на создание:
+
+```html
+<h1>Все посты</h1>
+<p><a href="{% url 'posts:post_create' %}">+ Новый пост</a></p>
+```
+
+**`post_detail.html`** — добавьте форму в секцию комментариев (перед закрывающим `</section>`):
+
+```html
+    <h3>Оставить комментарий</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ comment_form.as_p }}
+        <button type="submit">Отправить</button>
+    </form>
+```
+
+### Шаг 18.7. Проверить
+
+```bash
+python manage.py runserver
+```
+
+1. http://127.0.0.1:8000/ — нажмите «+ Новый пост»
+2. Заполните форму → «Опубликовать» → откроется страница поста
+3. Внизу страницы — форма комментария → «Отправить» → комментарий появится в списке
+
+### Итоговая схема (формы)
+
+```
+GET  /create/           → PostForm (пустая)     → post_form.html
+POST /create/           → PostForm (данные)     → Post в БД → redirect /1/
+
+GET  /1/                → CommentForm (пустая)  → post_detail.html
+POST /1/                → CommentForm (данные)  → Comment в БД → redirect /1/
+```
+
+📖 **Документация Django:**
+- [Working with forms](https://docs.djangoproject.com/en/stable/topics/forms/)
+- [ModelForm](https://docs.djangoproject.com/en/stable/topics/forms/modelforms/)
+- [Form rendering (`as_p`, `as_table`)](https://docs.djangoproject.com/en/stable/ref/forms/api/#as-p)
+- [CSRF protection](https://docs.djangoproject.com/en/stable/ref/csrf/)
+- [`redirect`](https://docs.djangoproject.com/en/stable/topics/http/shortcuts/#redirect)
+
+---
+
 ## Домашнее задание (опционально)
 
-1. Создать приложение `categories` с моделью Category и связать с Post
-2. Добавить поле `slug` к модели Post (ЧПУ-ссылки)
-3. Создать приложение `tags` с моделью Tag (ManyToMany с Post)
-4. Перенести отображение комментариев в отдельный view внутри `comments`
+1. Реализовать формы для создания постов и комментариев (см. [§18](#18-формы--создание-постов-и-комментариев))
+2. Создать приложение `categories` с моделью Category и связать с Post
+3. Добавить поле `slug` к модели Post (ЧПУ-ссылки)
+4. Создать приложение `tags` с моделью Tag (ManyToMany с Post)
+5. Перенести отображение комментариев в отдельный view внутри `comments`
 
 ---
 
@@ -1672,6 +1893,7 @@ python manage.py runserver
 | Миграции | [Migrations](https://docs.djangoproject.com/en/stable/topics/migrations/) |
 | Админка | [Admin site](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) |
 | Views и URL | [Views](https://docs.djangoproject.com/en/stable/topics/http/views/) · [URLs](https://docs.djangoproject.com/en/stable/topics/http/urls/) |
+| Формы | [Forms](https://docs.djangoproject.com/en/stable/topics/forms/) · [ModelForm](https://docs.djangoproject.com/en/stable/topics/forms/modelforms/) |
 | Шаблоны | [Templates](https://docs.djangoproject.com/en/stable/topics/templates/) · [Template language](https://docs.djangoproject.com/en/stable/ref/templates/language/) |
 | Manage-команды | [`django-admin` reference](https://docs.djangoproject.com/en/stable/ref/django-admin/) |
 | Безопасность / деплой | [Deployment checklist](https://docs.djangoproject.com/en/stable/howto/deployment/checklist/) |
