@@ -21,18 +21,25 @@
     <h2>Комментарии ({{ comments.count }})</h2>
 
     {% if comments %}
-        {% for comment in comments %}
-        <div class="comment">
-            <p>{{ comment.text|linebreaks }}</p>
-            <p class="meta">
-                {{ comment.author.username }} |
-                {{ comment.created_at|date:"d.m.Y H:i" }}
-            </p>
-        </div>
-        {% endfor %}
+    {% for comment in comments %}
+    <div class="comment">
+        <p>{{ comment.text|linebreaks }}</p>
+        <p class="meta">
+            {{ comment.author.username }} |
+            {{ comment.created_at|date:"d.m.Y H:i" }}
+        </p>
+    </div>
+    {% endfor %}
     {% else %}
-        <p>Комментариев пока нет.</p>
+    <p>Комментариев пока нет.</p>
     {% endif %}
+
+    <h3>Оставить комментарий</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ comment_form.as_p }}
+        <button type="submit">Отправить</button>
+    </form>
 </section>
 
 <p><a href="{% url 'posts:post_list' %}">← Назад к списку</a></p>
